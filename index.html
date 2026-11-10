@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>두모호 라이브 정보 수정</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background-color: #f4f6f8; margin: 0; }
+    .card { background: white; padding: 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 480px; margin: auto; }
+    h2 { margin-top: 0; color: #111; font-size: 20px; text-align: center; }
+    label { font-weight: bold; font-size: 14px; display: block; margin-top: 14px; color: #444; }
+    input[type="text"], textarea, select { width: 100%; padding: 12px; margin-top: 6px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
+    input[type="file"] { margin-top: 6px; }
+    button { width: 100%; background: #FF0000; color: white; border: none; padding: 14px; margin-top: 20px; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; }
+    button:disabled { background: #ccc; }
+    .status-msg { margin-top: 15px; padding: 10px; border-radius: 6px; text-align: center; font-size: 14px; display: none; }
+  </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<div class="card">
+  <h2>⚓ 두모호 라이브 정보 수정</h2>
+
+  <button id="auth-btn">구글 로그인 (유튜브 연동)</button>
+
+  <div id="form-section" style="display:none;">
+    <button id="load-btn" style="background:#555; margin-bottom:10px;">현재 방송 정보 불러오기</button>
+
+    <label for="broadcast-id">방송 ID</label>
+    <input type="text" id="broadcast-id" placeholder="유튜브 방송 ID">
+
+    <label for="title">방송 제목</label>
+    <input type="text" id="title" placeholder="오늘의 낚시 제목 입력">
+
+    <label for="description">방송 설명</label>
+    <textarea id="description" rows="3" placeholder="방송 설명 입력"></textarea>
+
+    <label for="privacy">공개 범위</label>
+    <select id="privacy">
+      <option value="public">공개 (Public)</option>
+      <option value="unlisted" selected>일부공개 (Unlisted)</option>
+      <option value="private">비공개 (Private)</option>
+    </select>
+
+    <label for="thumbnail">썸네일 이미지 변경</label>
+    <input type="file" id="thumbnail" accept="image/*">
+
+    <button id="update-btn">유튜브 스튜디오에 적용하기</button>
+  </div>
+
+  <div id="status-msg" class="status-msg"></div>
+</div>
+
+<script>
+  const CLIENT_ID = '326490585931-en6aamgla1ndos7pa1jjaq8ur0udej1o.apps.googleusercontent.com';
+  const SCOPES = 'https://www.googleapis.com/auth/youtube';
+
+  let tokenClient;
+  let accessToken = null;
+
+  window.onload = function () {
+    if (typeof google === 'undefined' || !google.accounts) {
+      showStatus('⚠️ 구글 로그인 스크립트 로딩 실패. 인터넷 연결을 확인해주세요.', '#d32f2f');
+      return;
+    }
+
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPES,
+      // uri 우회 설정 추가
+      ux_mode: 'popup',
+      callback: (response) => {
+        if (response.error) {
+          alert('로그인 실패: ' + response.error);
+          return;
+        }
+        accessToken = response.access_token;
+        document.getElementById('auth-btn').style.display = 'none';
+        document.getElementById('form-section').style.display = 'block';
+        loadCurrentBroadcast();
+      },
+    });
+
+    document.getElementById('auth-btn').onclick = function() {
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    };
+
+    document.getElementById('load-btn').onclick = loadCurrentBroadcast;
+    document.getElementById('update-btn').onclick = updateLiveBroadcast;
+  };
+
+  async function loadCurrentBroadcast() {
+    showStatus('방송 정보 불러오는 중...', '#333');
+    try {
+      const res = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&broadcastStatus=all&maxResults=5', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }).then(r => r.json());
+
+      if (res.items && res.items.length > 0) {
+        const item = res.items[0];
+        document.getElementById('broadcast-id').value = item.id;
+        document.getElementById('title').value = item.snippet.title || '';
+        document.getElementById('description').value = item.snippet.description || '';
+        document.getElementById('privacy').value = item.status.privacyStatus || 'unlisted';
+        showStatus('✅ 현재 방송 정보를 불러왔습니다.', '#2e7d32');
+      } else {
+        showStatus('⚠️ 활성화된 라이브 방송을 찾지 못했습니다.', '#d32f2f');
+      }
+    } catch (e) {
+      showStatus('불러오기 실패: ' + e.message, '#d32f2f');
+    }
+  }
+
+  async function updateLiveBroadcast() {
+    const broadcastId = document.getElementById('broadcast-id').value;
+    const title = document.getElementById('title').value;
+    const description = document.getElementById('description').value;
+    const privacy = document.getElementById('privacy').value;
+    const thumbnailFile = document.getElementById('thumbnail').files[0];
+
+    if (!broadcastId) { alert('방송 ID가 없습니다!'); return; }
+    if (!title) { alert('제목을 입력해주세요!'); return; }
+
+    const btn = document.getElementById('update-btn');
+    btn.innerText = '저장 중...';
+    btn.disabled = true;
+
+    try {
+      await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id,snippet,status', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: broadcastId,
+          snippet: { title: title, description: description, scheduledStartTime: new Date().toISOString() },
+          status: { privacyStatus: privacy }
+        })
+      });
+
+      if (thumbnailFile) {
+        await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${broadcastId}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': thumbnailFile.type
+          },
+          body: thumbnailFile
+        });
+      }
+
+      showStatus('������ 유튜브 스튜디오 수정 완료! 액순씨 앱에서 방송을 시작하세요.', '#2e7d32');
+    } catch (err) {
+      alert('수정 실패: ' + err.message);
+    } finally {
+      btn.innerText = '유튜브 스튜디오에 적용하기';
+      btn.disabled = false;
+    }
+  }
+
+  function showStatus(text, color) {
+    const el = document.getElementById('status-msg');
+    el.style.display = 'block';
+    el.style.color = color;
+    el.innerText = text;
+  }
+</script>
+
+</body>
+</html>
