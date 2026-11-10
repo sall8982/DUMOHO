@@ -126,6 +126,7 @@
     btn.disabled = true;
 
     try {
+      // 1. 먼저 현재 방송의 기본 정보를 가져와서 비어있는 값(카테고리 등) 유실을 방지합니다.
       const getRes = await fetch(`https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&id=${broadcastId}`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       }).then(r => r.json());
@@ -136,10 +137,12 @@
 
       const currentItem = getRes.items[0];
 
+      // 2. 기존 스니펫 정보에 제목, 설명만 안전하게 덮어씁니다.
       currentItem.snippet.title = title;
       currentItem.snippet.description = description;
       currentItem.status.privacyStatus = privacy;
 
+      // 3. PUT 요청 전송
       const updateRes = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status', {
         method: 'PUT',
         headers: {
@@ -154,6 +157,7 @@
         throw new Error('방송 정보 수정 실패: ' + errText);
       }
 
+      // 4. 썸네일 파일이 선택된 경우 업로드 실행
       if (thumbnailFile) {
         const thumbRes = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${broadcastId}`, {
           method: 'POST',
