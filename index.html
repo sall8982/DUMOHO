@@ -68,7 +68,6 @@
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
-      // uri 우회 설정 추가
       ux_mode: 'popup',
       callback: (response) => {
         if (response.error) {
@@ -127,21 +126,40 @@
     btn.disabled = true;
 
     try {
-      await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id,snippet,status', {
+      // 1. 먼저 현재 방송의 기본 정보를 가져와서 비어있는 값(카테고리 등) 유실을 방지합니다.
+      const getRes = await fetch(`https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&id=${broadcastId}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }).then(r => r.json());
+
+      if (!getRes.items || getRes.items.length === 0) {
+        throw new Error('해당 방송 ID를 찾을 수 없습니다.');
+      }
+
+      const currentItem = getRes.items[0];
+
+      // 2. 기존 스니펫 정보에 제목, 설명만 안전하게 덮어씁니다.
+      currentItem.snippet.title = title;
+      currentItem.snippet.description = description;
+      currentItem.status.privacyStatus = privacy;
+
+      // 3. PUT 요청 전송
+      const updateRes = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          id: broadcastId,
-          snippet: { title: title, description: description, scheduledStartTime: new Date().toISOString() },
-          status: { privacyStatus: privacy }
-        })
+        body: JSON.stringify(currentItem)
       });
 
+      if (!updateRes.ok) {
+        const errText = await updateRes.text();
+        throw new Error('방송 정보 수정 실패: ' + errText);
+      }
+
+      // 4. 썸네일 파일이 선택된 경우 업로드 실행
       if (thumbnailFile) {
-        await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${broadcastId}`, {
+        const thumbRes = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${broadcastId}`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -149,11 +167,16 @@
           },
           body: thumbnailFile
         });
+
+        if (!thumbRes.ok) {
+          throw new Error('썸네일 업로드 실패');
+        }
       }
 
-      showStatus('������ 유튜브 스튜디오 수정 완료! 액순씨 앱에서 방송을 시작하세요.', '#2e7d32');
+      showStatus('🎉 유튜브 스튜디오 수정 완료! 라이브 정보를 확인하세요.', '#2e7d32');
     } catch (err) {
-      alert('수정 실패: ' + err.message);
+      alert('에러 발생: ' + err.message);
+      showStatus('❌ 수정 실패: ' + err.message, '#d32f2f');
     } finally {
       btn.innerText = '유튜브 스튜디오에 적용하기';
       btn.disabled = false;
