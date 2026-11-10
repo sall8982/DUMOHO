@@ -14,6 +14,7 @@
     button { width: 100%; background: #FF0000; color: white; border: none; padding: 14px; margin-top: 20px; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; }
     button:disabled { background: #ccc; }
     .status-msg { margin-top: 15px; padding: 10px; border-radius: 6px; text-align: center; font-size: 14px; display: none; }
+    .thumb-info { font-size: 13px; color: #1976d2; margin-top: 6px; font-weight: bold; }
   </style>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -45,6 +46,7 @@
 
     <label for="thumbnail">썸네일 이미지 변경</label>
     <input type="file" id="thumbnail" accept="image/*">
+    <div id="current-thumb-name" class="thumb-info"></div>
 
     <button id="update-btn">유튜브 스튜디오에 적용하기</button>
   </div>
@@ -102,6 +104,16 @@
         document.getElementById('title').value = item.snippet.title || '';
         document.getElementById('description').value = item.snippet.description || '';
         document.getElementById('privacy').value = item.status.privacyStatus || 'unlisted';
+
+        // 저장된 썸네일 파일 이름 표시하기
+        const savedThumbName = localStorage.getItem('last_thumb_' + item.id);
+        const thumbInfoEl = document.getElementById('current-thumb-name');
+        if (savedThumbName) {
+          thumbInfoEl.innerText = '📸 적용된 파일명: ' + savedThumbName;
+        } else {
+          thumbInfoEl.innerText = '📸 원본 썸네일 적용 중';
+        }
+
         showStatus('✅ 현재 방송 정보를 불러왔습니다.', '#2e7d32');
       } else {
         showStatus('⚠️ 활성화된 라이브 방송을 찾지 못했습니다.', '#d32f2f');
@@ -126,7 +138,6 @@
     btn.disabled = true;
 
     try {
-      // 1. 먼저 현재 방송의 기본 정보를 가져와서 비어있는 값(카테고리 등) 유실을 방지합니다.
       const getRes = await fetch(`https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&id=${broadcastId}`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       }).then(r => r.json());
@@ -137,12 +148,10 @@
 
       const currentItem = getRes.items[0];
 
-      // 2. 기존 스니펫 정보에 제목, 설명만 안전하게 덮어씁니다.
       currentItem.snippet.title = title;
       currentItem.snippet.description = description;
       currentItem.status.privacyStatus = privacy;
 
-      // 3. PUT 요청 전송
       const updateRes = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status', {
         method: 'PUT',
         headers: {
@@ -157,7 +166,7 @@
         throw new Error('방송 정보 수정 실패: ' + errText);
       }
 
-      // 4. 썸네일 파일이 선택된 경우 업로드 실행
+      // 썸네일 파일 업로드 및 파일명 저장
       if (thumbnailFile) {
         const thumbRes = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${broadcastId}`, {
           method: 'POST',
@@ -171,6 +180,10 @@
         if (!thumbRes.ok) {
           throw new Error('썸네일 업로드 실패');
         }
+
+        // 정상 올라간 파일명을 저장해둡니다.
+        localStorage.setItem('last_thumb_' + broadcastId, thumbnailFile.name);
+        document.getElementById('current-thumb-name').innerText = '📸 적용된 파일명: ' + thumbnailFile.name;
       }
 
       showStatus('🎉 유튜브 스튜디오 수정 완료! 라이브 정보를 확인하세요.', '#2e7d32');
