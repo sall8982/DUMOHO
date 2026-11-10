@@ -65,6 +65,15 @@
       return;
     }
 
+    // 1. 휴대폰/브라우저에 기존 저장된 로그인 토큰이 있는지 확인
+    const savedToken = localStorage.getItem('dumoho_yt_token');
+    if (savedToken) {
+      accessToken = savedToken;
+      document.getElementById('auth-btn').style.display = 'none';
+      document.getElementById('form-section').style.display = 'block';
+      loadCurrentBroadcast();
+    }
+
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
@@ -75,6 +84,9 @@
           return;
         }
         accessToken = response.access_token;
+        // 2. 브라우저 저장소(localStorage)에 인증 토큰 영구 보관!
+        localStorage.setItem('dumoho_yt_token', accessToken);
+        
         document.getElementById('auth-btn').style.display = 'none';
         document.getElementById('form-section').style.display = 'block';
         loadCurrentBroadcast();
@@ -82,7 +94,8 @@
     });
 
     document.getElementById('auth-btn').onclick = function() {
-      tokenClient.requestAccessToken({ prompt: 'consent' });
+      // 3. prompt: 'consent'를 제거하여 매번 경고창이 뜨는 것을 완전 차단!
+      tokenClient.requestAccessToken({ prompt: '' });
     };
 
     document.getElementById('load-btn').onclick = loadCurrentBroadcast;
@@ -94,10 +107,21 @@
     try {
       const res = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&broadcastStatus=all&maxResults=5', {
         headers: { 'Authorization': `Bearer ${accessToken}` }
-      }).then(r => r.json());
+      });
 
-      if (res.items && res.items.length > 0) {
-        const item = res.items[0];
+      // 만약 토큰이 만료되어 401 에러가 나면 저장된 토큰을 지우고 로그인 버튼 재표시
+      if (res.status === 401) {
+        localStorage.removeItem('dumoho_yt_token');
+        document.getElementById('auth-btn').style.display = 'block';
+        document.getElementById('form-section').style.display = 'none';
+        showStatus('⚠️ 로그인 세션이 만료되었습니다. 다시 로그인해 주세요.', '#d32f2f');
+        return;
+      }
+
+      const data = await res.json();
+
+      if (data.items && data.items.length > 0) {
+        const item = data.items[0];
         document.getElementById('broadcast-id').value = item.id;
         document.getElementById('title').value = item.snippet.title || '';
         document.getElementById('description').value = item.snippet.description || '';
@@ -128,13 +152,14 @@
     try {
       const getRes = await fetch(`https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&id=${broadcastId}`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
-      }).then(r => r.json());
+      });
+      const getResData = await getRes.json();
 
-      if (!getRes.items || getRes.items.length === 0) {
+      if (!getResData.items || getResData.items.length === 0) {
         throw new Error('해당 방송 ID를 찾을 수 없습니다.');
       }
 
-      const currentItem = getRes.items[0];
+      const currentItem = getResData.items[0];
 
       currentItem.snippet.title = title;
       currentItem.snippet.description = description;
