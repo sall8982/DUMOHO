@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>두모호 라이브 정보 수정</title>
+  <title>두모호 유튜브 라이브 정보 수정</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 12px; background-color: #f4f6f8; margin: 0; box-sizing: border-box; }
     .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 480px; margin: auto; box-sizing: border-box; }
@@ -22,7 +22,7 @@
 <body>
 
 <div class="card">
-  <h2>⚓ 두모호 라이브 정보 수정</h2>
+  <h2>⚓ 두모호 유튜브 라이브 정보 수정</h2>
 
   <button id="auth-btn">구글 로그인 (유튜브 연동)</button>
 
@@ -70,7 +70,7 @@
       return;
     }
 
-    // 1. 기존 저장된 로그인 토큰이 있는지 확인
+    // 기존 저장된 로그인 토큰이 있는지 확인
     const savedToken = localStorage.getItem('dumoho_yt_token');
     if (savedToken) {
       accessToken = savedToken;
@@ -104,14 +104,19 @@
     document.getElementById('load-btn').onclick = loadCurrentBroadcast;
     document.getElementById('update-btn').onclick = updateLiveBroadcast;
     
-    // 2. 로그아웃 버튼 클릭 이벤트 처리
+    // 완전한 세션 해제(Revoke) 방식의 로그아웃
     document.getElementById('logout-btn').onclick = function() {
-      if (confirm('로그아웃 하시겠습니까?')) {
+      if (confirm('완전히 로그아웃 하시겠습니까?')) {
+        if (accessToken) {
+          google.accounts.oauth2.revoke(accessToken, () => {
+            console.log('구글 인증 세션 완전 해제 완료');
+          });
+        }
         localStorage.removeItem('dumoho_yt_token');
         accessToken = null;
         document.getElementById('form-section').style.display = 'none';
         document.getElementById('auth-btn').style.display = 'block';
-        showStatus('로그아웃 되었습니다.', '#555');
+        showStatus('로그아웃 되었습니다. (앱 재접속 시 다시 로그인하셔야 합니다)', '#555');
       }
     };
   };
