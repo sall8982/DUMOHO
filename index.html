@@ -130,10 +130,10 @@
   };
 
   async function loadCurrentBroadcast() {
-    showStatus('방송 정보 불러오는 중...', '#333');
+    showStatus('유튜브 스튜디오 예약 방송 정보 불러오는 중...', '#333');
     try {
-      // 1순위: 현재 진행 중인(active) 라이브 방송 조회
-      let res = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&broadcastStatus=active&maxResults=1', {
+      // 유튜브 스튜디오 대시보드에 대기 중인 예약 방송(upcoming) 정보를 최우선으로 타겟팅
+      let res = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&broadcastStatus=upcoming&maxResults=1', {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
 
@@ -144,9 +144,9 @@
 
       let data = await res.json();
 
-      // 만약 진행 중인 방송이 없다면, 2순위로 다가올 방송(upcoming) 조회
+      // 만약 예약된 방송이 없다면 혹시 진행 중인 방송(active)이 있는지 차선책으로 조회
       if (!data.items || data.items.length === 0) {
-        res = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&broadcastStatus=upcoming&maxResults=1', {
+        res = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&broadcastStatus=active&maxResults=1', {
           headers: { 'Authorization': `Bearer ${accessToken}` }
         });
         data = await res.json();
@@ -158,9 +158,9 @@
         document.getElementById('title').value = item.snippet.title || '';
         document.getElementById('description').value = item.snippet.description || '';
         document.getElementById('privacy').value = item.status.privacyStatus || 'unlisted';
-        showStatus('✅ 현재 방송 정보를 정확하게 불러왔습니다!', '#2e7d32');
+        showStatus('✅ 스튜디오에 대기 중인 방송 정보를 정확하게 불러왔습니다!', '#2e7d32');
       } else {
-        showStatus('⚠️ 현재 진행 중이거나 예정된 라이브 방송을 찾지 못했습니다. (방송 ID를 직접 넣으셔도 됩니다)', '#d32f2f');
+        showStatus('⚠️ 유튜브 스튜디오에 예약되거나 진행 중인 라이브 방송을 찾지 못했습니다.', '#d32f2f');
       }
     } catch (e) {
       showStatus('불러오기 실패: ' + e.message, '#d32f2f');
@@ -190,7 +190,6 @@
     btn.disabled = true;
 
     try {
-      // 1. 기존 방송 정보 가져오기
       const getRes = await fetch(`https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&id=${broadcastId}`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
@@ -206,13 +205,12 @@
       currentItem.snippet.description = description;
       currentItem.status.privacyStatus = privacy;
 
-      // 2. 방송 제목, 설명, 공개범위 업데이트 (PUT)
       const updateRes = await fetch('https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status', {
-        method: 'PUT',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         },
+        method: 'PUT',
         body: JSON.stringify(currentItem)
       });
 
@@ -221,7 +219,6 @@
         throw new Error('방송 정보 수정 실패: ' + errText);
       }
 
-      // 3. 썸네일 이미지가 선택된 경우 라이브 전용 썸네일 업로드 API 호출
       if (thumbnailFile) {
         const thumbRes = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${broadcastId}`, {
           method: 'POST',
@@ -238,7 +235,7 @@
         }
       }
 
-      showStatus('🎉 유튜브 스튜디오 수정 완료! 라이브 정보를 확인하세요.', '#2e7d32');
+      showStatus('🎉 유튜브 스튜디오 수정 완료! 스튜디오 화면을 새로고침해 보세요.', '#2e7d32');
     } catch (err) {
       alert('에러 발생: ' + err.message);
       showStatus('❌ 수정 실패: ' + err.message, '#d32f2f');
